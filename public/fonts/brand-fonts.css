@@ -1,0 +1,38 @@
+/*
+PHẠM VĂN MEDIA — Brand font mapping
+
+Expected optional local files:
+  /public/fonts/BrushScriptMT.ttf
+  /public/fonts/TH-About-Heart.ttf
+
+If the local file is not present:
+- "PHẠM VĂN MEDIA" falls back to the installed Windows Brush Script MT.
+- The slogan falls back to graceful script fonts.
+
+To replace a font later:
+1. Put the licensed font file in this folder.
+2. Keep the same filename OR update only the src URL below.
+No JSX/layout changes are needed.
+*/
+
+@font-face {
+  font-family: "PVM Brush Script";
+  src:
+    local("Brush Script MT"),
+    local("Brush Script Std"),
+    url("/fonts/BrushScriptMT.ttf") format("truetype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "PVM About Heart";
+  src:
+    local("TH About Heart"),
+    local("About Heart"),
+    url("/fonts/TH-About-Heart.ttf") format("truetype");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
