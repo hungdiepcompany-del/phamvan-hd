@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function hasLegacyAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
+
+    function isPrimaryOwner() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'owner';
+    }
+
+    function hasEmailAdmin() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && exists(/databases/$(database)/documents/adminAccess/$(request.auth.token.email))
+        && get(/databases/$(database)/documents/adminAccess/$(request.auth.token.email)).data.role == 'admin';
+    }
+
+    function canAdmin() {
+      return hasLegacyAdmin() || hasEmailAdmin();
+    }
+
+    function validAdminAccess(email) {
+      return request.resource.data.keys().hasOnly(['email', 'role', 'createdAt', 'createdBy'])
+        && request.resource.data.email == email
+        && request.resource.data.role == 'admin'
+        && request.resource.data.createdBy is string;
+    }
+
+    function validPublicQuote() {
+      return request.resource.data.keys().hasOnly([
+        'name','phone','location','date','timeline','notes','serviceId','need',
+        'sessions','addons','sensitive','estimate','status','createdAt','createdAtIso','source'
+      ])
+      && request.resource.data.name is string
+      && request.resource.data.name.size() > 0
+      && request.resource.data.name.size() <= 160
+      && request.resource.data.phone is string
+      && request.resource.data.phone.size() > 0
+      && request.resource.data.phone.size() <= 60
+      && request.resource.data.location is string
+      && request.resource.data.location.size() > 0
+      && request.resource.data.location.size() <= 300
+      && request.resource.data.timeline is string
+      && request.resource.data.timeline.size() <= 5000
+      && request.resource.data.notes is string
+      && request.resource.data.notes.size() <= 5000
+      && request.resource.data.serviceId in ['wedding','funeral','reburial','family','event','community','business']
+      && request.resource.data.need in ['photo','video','combo']
+      && request.resource.data.sessions is int
+      && request.resource.data.sessions >= 1
+      && request.resource.data.sessions <= 12
+      && request.resource.data.addons is list
+      && request.resource.data.addons.size() <= 5
+      && request.resource.data.estimate is number
+      && request.resource.data.estimate >= 0
+      && request.resource.data.status == 'pending'
+      && request.resource.data.source == 'phamvan-hd-web';
+    }
+
+    match /quoteRequests/{quoteId} {
+      allow create: if validPublicQuote();
+      allow read, update, delete: if canAdmin();
+    }
+
+    // Legacy/bootstrap roles. Owner hiện tại tiếp tục được giữ nguyên theo UID.
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Admin được Owner cấp quyền theo email Google đã xác minh.
+    match /adminAccess/{email} {
+      allow get: if isPrimaryOwner()
+        || (signedIn() && request.auth.token.email_verified == true && request.auth.token.email == email);
+      allow list: if isPrimaryOwner();
+      allow create, update: if isPrimaryOwner() && validAdminAccess(email);
+      allow delete: if isPrimaryOwner();
+    }
+
+    // Font metadata is public-readable because the public site must load configured fonts.
+    // Only the primary Owner can mutate the font catalog.
+    match /fontCatalog/{fontId} {
+      allow read: if true;
+      allow create, update, delete: if isPrimaryOwner();
+    }
+
+    // Public typography configuration. No private/customer data lives here.
+    match /siteSettings/{settingId} {
+      allow read: if settingId in ['typography', 'content'];
+      allow create, update, delete: if settingId in ['typography', 'content'] && isPrimaryOwner();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
